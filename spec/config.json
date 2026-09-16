@@ -1,0 +1,9 @@
+{
+  "coins": { "c5": 5, "c10": 10 },
+  "products": {
+    "s1": { "name": "Chips", "price": 10 },
+    "s2": { "name": "Juice", "price": 15 },
+    "s3": { "name": "Chocolate", "price": 20 }
+  },
+  "cap": 25
+}
