@@ -18,7 +18,7 @@ CFG = load_config(ROOT / "spec" / "config.json")
 @pytest.fixture(scope="module")
 def machines():
     naive, lam, cfg = build(CFG)
-    mdfa, mlam, classes = to_minimal(naive, lam)
+    mdfa, mlam, classes, trace = to_minimal(naive, lam)
     return naive, lam, mdfa, mlam
 
 
@@ -91,7 +91,7 @@ def test_minimal_size_theorem(coins, prices, cap, naive_n, min_n):
     cfg = {"coins": coins, "cap": cap,
            "products": {f"s{i+1}": {"name": f"P{i+1}", "price": p} for i, p in enumerate(prices)}}
     naive, lam, _ = build(cfg)
-    mdfa, _, _ = to_minimal(naive, lam)
+    mdfa, _, _, _ = to_minimal(naive, lam)
     assert len(naive.states) == naive_n
     assert len(mdfa.states) == min_n == cap // 5 + 3
 

@@ -1,4 +1,4 @@
-"""DOT rendering (Member D owns; starter version)."""
+"""DOT rendering (Member D owns)."""
 from collections import defaultdict
 
 
@@ -28,3 +28,26 @@ def to_dot(dfa, highlight=None):
         out.append('"%s" -> "%s" [label="%s"];' % (u, v, ",".join(sorted(syms))))
     out.append("}")
     return "\n".join(out)
+
+
+def classes_table(classes, name_of):
+    """Human-readable rows: [minimal_name, sorted(members)]."""
+    rows = []
+    for blk in classes:
+        members = sorted(blk)
+        rows.append({"minimal state": name_of[members[0]], "merged from": ", ".join(members)})
+    return rows
+
+
+def trace_table(trace):
+    rows = []
+    for i, step in enumerate(trace, 1):
+        inter, diff = step["after"]
+        rows.append({
+            "step": i,
+            "symbol": step["symbol"],
+            "splitter": "{" + ",".join(step["splitter"]) + "}",
+            "block split": "{" + ",".join(step["before"]) + "}",
+            "into": "{" + ",".join(inter) + "}  /  {" + ",".join(diff) + "}",
+        })
+    return rows

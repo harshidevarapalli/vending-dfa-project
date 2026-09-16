@@ -18,7 +18,7 @@ st.set_page_config(page_title="Vending Automaton", layout="wide")
 def load_default():
     cfg = load_config(ROOT / "spec" / "config.json")
     naive, lam, cfg = build(cfg)
-    dfa, mlam, _ = to_minimal(naive, lam)
+    dfa, mlam, _classes, _trace = to_minimal(naive, lam)
     return dfa, mlam, cfg
 
 
