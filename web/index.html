@@ -400,6 +400,31 @@ h1 em { font-style: normal; color: var(--primary); }
   <div class="gen-wrap" id="gen-wrap"></div>
 </section>
 
+<div id="boot-crash" style="display:none;position:fixed;inset:0;z-index:99999;background:#1a0b0f;
+  color:#ffd7d7;font:14px/1.6 ui-monospace,Menlo,Consolas,monospace;padding:28px;overflow:auto;
+  white-space:pre-wrap;"></div>
+<script>
+/* If anything below throws (a WebGL quirk, a blocked API, a bad browser),
+   show it on the page instead of failing to a silent blank screen — this
+   file has no console when it's opened standalone as a viva backup. */
+(function () {
+  function showBootCrash(msg) {
+    var el = document.getElementById('boot-crash');
+    if (!el) return;
+    el.style.display = 'block';
+    el.textContent = 'This offline copy hit an error while starting:\n\n' + msg +
+      '\n\nTry a different browser (Chrome or Firefox work best), or open DevTools ' +
+      '(F12 or Cmd+Opt+J) → Console for the full trace. The Simulator/Generator ' +
+      'dashboard on the deployed app is unaffected by this file.';
+  }
+  window.addEventListener('error', function (e) {
+    showBootCrash((e.error && e.error.stack) || e.message || String(e.error || e));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    showBootCrash((e.reason && e.reason.stack) || String(e.reason));
+  });
+})();
+</script>
 <script src="vendor/three.min.js"></script>
 <script>
 /* DATA — produced by the Python backend (core.generator + core.minimize).
