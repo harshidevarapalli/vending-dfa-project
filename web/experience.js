@@ -500,6 +500,8 @@ addEventListener('pointerdown', e => { if (!R || HOOK.paused || effP() > .3 || o
 addEventListener('pointerup', () => { drag = null; });
 
 /* ════════════════ scroll: hero → dive → brain ════════════════ */
+// #scroll-root (== <main>), not window: see the comment on `main` in index.html.
+const scrollRoot = document.getElementById('scroll-root');
 const hero = document.getElementById('hero'), dive = document.getElementById('dive');
 const heroPanel = hero.querySelector('.panel'), cue = hero.querySelector('.scroll-cue');
 const pixels = document.getElementById('pixels'), flashEl = document.getElementById('blueprint-flash');
@@ -524,7 +526,7 @@ const DIVE_LINES = [[.0, ''], [.05, 'Every part of the machine is a piece of the
   [.44, 'Now look closer at the display…'], [.8, '']];
 
 function onScroll() {
-  const y = scrollY, vh = innerHeight;
+  const y = scrollRoot.scrollTop, vh = scrollRoot.clientHeight;
   heroP = clamp(y / (vh * .6));
   const top = dive.offsetTop, len = dive.offsetHeight - vh;
   diveP = clamp((y - top) / len);
@@ -540,7 +542,7 @@ function onScroll() {
   canvas.style.visibility = stageOn || HOOK.sim ? 'visible' : 'hidden';
   if (traces) traces.material.opacity = smooth(.12, .22, diveP) * (1 - smooth(.6, .75, diveP)) * .95;
 }
-addEventListener('scroll', onScroll, { passive: true });
+scrollRoot.addEventListener('scroll', onScroll, { passive: true });
 
 /* camera keyframes: hero (machine left of centre) → ¾ reveal → into the LCD */
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -773,7 +775,7 @@ tuple.querySelectorAll('.part').forEach(s => {
   s.onmouseleave = () => svg.setAttribute('class', 'mode-intro');
 });
 
-document.getElementById('to-top').onclick = () => scrollTo({ top: 0, behavior: 'smooth' });
+document.getElementById('to-top').onclick = () => scrollRoot.scrollTo({ top: 0, behavior: 'smooth' });
 
 /* go */
 if (R) buildScene();
@@ -786,6 +788,6 @@ if (!R) { canvas.style.display = 'none'; document.querySelector('.lede').insertA
 if (ENV.onReady) ENV.onReady({
   M, C, S, on, feed, resetMachine, cancelRun: () => { runToken++; }, formal, isFinal, bal, el, HOOK,
   syncScroll: onScroll, has3D: !!R,
-  scrollTop: () => scrollTo({ top: 0, behavior: 'instant' }),
+  scrollTop: () => scrollRoot.scrollTo({ top: 0, behavior: 'instant' }),
 });
 };
