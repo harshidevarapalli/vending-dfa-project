@@ -244,6 +244,7 @@ h1 em { font-style: normal; color: var(--primary); }
   *, *::before { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 </style>
+<link rel="stylesheet" href="views.css">
 </head>
 <body>
 <canvas id="stage" aria-label="3D vending machine. Click its coins and keys to use it."></canvas>
@@ -369,14 +370,44 @@ h1 em { font-style: normal; color: var(--primary); }
   </section>
 </main>
 
-<script>/*__THREE__*/</script>
+<!-- ═══ navigation: the machine's side plate ═══ -->
+<nav class="vm-nav" id="vm-nav" aria-label="Machine sections">
+  <button class="vm-brand" data-view="home" title="Back to the experience">
+    <svg class="vm-mark" viewBox="0 0 24 32" aria-hidden="true">
+      <rect x="1" y="1" width="22" height="30" rx="4" class="body"/>
+      <rect x="4" y="5" width="11" height="17" rx="1.5" class="glass"/>
+      <rect x="17" y="5" width="3.5" height="3" rx=".6" class="lcd"/>
+      <rect x="4" y="25" width="11" height="3" rx="1" class="bay"/>
+    </svg>
+    <span class="vm-brand-txt"><b>VENDING MACHINE</b><small>↩ the experience</small></span>
+  </button>
+  <div class="vm-nav-lcd mono" id="nav-lcd" title="Current DFA state and balance"></div>
+  <button class="vm-nav-item" data-view="sim">
+    <span class="ico">🥤</span><span class="t"><b>Simulator</b><small>Operate the machine</small></span><i class="led"></i>
+  </button>
+  <button class="vm-nav-item" data-view="gen">
+    <span class="ico">⚙️</span><span class="t"><b>Generator</b><small>Build an automaton</small></span><i class="led"></i>
+  </button>
+</nav>
+
+<!-- ═══ Simulator: operate the physical machine ═══ -->
+<section class="vm-view" id="view-sim" aria-label="Simulator" hidden>
+  <div class="sim-panel" id="sim-panel"></div>
+</section>
+
+<!-- ═══ Generator: the engineering bay ═══ -->
+<section class="vm-view" id="view-gen" aria-label="Generator" hidden>
+  <div class="gen-wrap" id="gen-wrap"></div>
+</section>
+
+<script src="vendor/three.min.js"></script>
 <script>
-/* ════════════════════════════════════════════════════════════════════════
-   DATA — produced by the Python backend (core.generator + core.minimize).
-   Nothing below re-implements δ or λ: every behaviour is a lookup.
-   ════════════════════════════════════════════════════════════════════════ */
-const M = /*__MACHINE__*/null;
-/*__APP__*/
+/* DATA — produced by the Python backend (core.generator + core.minimize).
+   Offline copies get it inlined here; inside the app it arrives from Python. */
+window.__VM_DATA__ = /*__DATA__*/null;
 </script>
+<script src="experience.js"></script>
+<script src="views.js"></script>
+<script src="boot.js"></script>
 </body>
 </html>

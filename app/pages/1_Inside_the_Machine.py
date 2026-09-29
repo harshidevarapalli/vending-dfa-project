@@ -1,10 +1,18 @@
-"""Inside the Machine — cinematic, scroll-driven explainer (frontend only).
+"""Inside the Machine — the immersive HTML front end (frontend only).
 
-A full-screen HTML/Three.js experience embedded in Streamlit. It never
-re-implements the automaton: the machine it animates is produced here by the
-existing backend (core.generator.build + core.minimize.to_minimal, called
-read-only) and handed to the page as JSON. If the Generator page loaded a
-custom machine into the session, that machine is shown instead.
+A full-screen HTML/Three.js experience with its own sidebar, Simulator and
+Generator, embedded as a two-way Streamlit component. It never re-implements
+the automaton:
+
+* the machine it animates comes from core.generator.build +
+  core.minimize.to_minimal (called read-only, via ui.gen_service);
+* the HTML Generator sends its form here, and this page answers with the
+  output of those same backend functions and the core.render tables;
+* "Load into Simulator" puts the machine into st.session_state exactly like
+  the Streamlit Generator page does, so every page shares it.
+
+The downloadable offline copy bakes in the default machine plus a set of
+machines pre-built by the same backend code.
 """
 import json
 import sys
@@ -19,80 +27,109 @@ from streamlit.errors import StreamlitPageNotFoundError  # noqa: E402
 from core import theme  # noqa: E402
 from core.generator import build, load_config  # noqa: E402
 from core.minimize import to_minimal  # noqa: E402
+from ui import gen_service  # noqa: E402
+from ui.session import init_ui_state, on_reset  # noqa: E402
 
 st.set_page_config(page_title="Inside the Machine", page_icon="🥤", layout="wide",
                    initial_sidebar_state="collapsed")
 
 WEB = ROOT / "web"
+DEFAULT_CFG = ROOT / "spec" / "config.json"
+
+# Kept for anything that imported it from here before the refactor.
+machine_payload = gen_service.machine_payload
 
 
-def machine_payload(cfg):
-    """Serialize the backend's own machine for the browser (read-only use)."""
-    naive, lam, cfg = build(cfg)
-    dfa, mlam, classes, trace = to_minimal(naive, lam)
-    from core.minimize import _label
-    return {
-        "cfg": cfg,
-        "start": dfa.initial_state,
-        "final": sorted(dfa.final_states),
-        "states": sorted(dfa.states),
-        "symbols": sorted(dfa.input_symbols),
-        "delta": {q: dict(row) for q, row in dfa.transitions.items()},
-        "lambda": {q: {a: mlam[(q, a)] for a in dfa.input_symbols} for q in dfa.states},
-        "naive": {
-            "states": sorted(naive.states),
-            "final": sorted(naive.final_states),
-            "classes": [sorted(b) for b in classes],
-            "name_of": {q: _label(b, naive) for b in classes for q in b},
-            "steps": len(trace),
-        },
-    }
-
-
-def palette_css():
-    p = theme
-    return (f"--primary:{p.PRIMARY};--secondary:{p.SECONDARY};--bg:{p.BACKGROUND};"
-            f"--panel:{p.PANEL};--text:{p.TEXT};--muted:{p.MUTED};--warning:{p.WARNING};"
-            f"--success:{p.SUCCESS};")
+def palette():
+    return {"primary": theme.PRIMARY, "secondary": theme.SECONDARY, "bg": theme.BACKGROUND,
+            "panel": theme.PANEL, "text": theme.TEXT, "muted": theme.MUTED,
+            "warning": theme.WARNING, "success": theme.SUCCESS}
 
 
 def _read(path):
     return Path(path).read_text(encoding="utf-8")
 
 
-def render_html(payload):
-    html = _read(str(WEB / "experience.html"))
-    three = _read(str(WEB / "vendor" / "three.min.js"))
-    app = _read(str(WEB / "experience.js"))
-    return (html.replace("/*__PALETTE__*/", palette_css())
-                .replace("/*__MACHINE__*/null", json.dumps(payload, ensure_ascii=False))
-                .replace("/*__APP__*/", app)
-                .replace("/*__THREE__*/", three))
+# ── offline single-file build ──────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def _prebuilt(cfg_json):
+    return gen_service.prebuilt(json.loads(cfg_json), n=12)
 
 
-cfg = (st.session_state.machine[2] if "machine" in st.session_state
-       else load_config(ROOT / "spec" / "config.json"))
-html = render_html(machine_payload(cfg))
+def render_html(payload, prebuilt=None):
+    """Inline every asset into ONE file that opens without Python or internet."""
+    html = _read(str(WEB / "index.html"))
+    for tag, path in (('<link rel="stylesheet" href="views.css">', "views.css"),):
+        html = html.replace(tag, "<style>\n" + _read(str(WEB / path)) + "\n</style>")
+    for src in ("vendor/three.min.js", "experience.js", "views.js", "boot.js"):
+        html = html.replace(f'<script src="{src}"></script>',
+                            "<script>\n" + _read(str(WEB / src)) + "\n</script>")
+    data = {"machine": payload, "palette": palette(), "default_form": gen_service.DEFAULT_FORM,
+            "prebuilt": prebuilt or []}
+    css_vars = "".join(f"--{k}:{v};" for k, v in palette().items())
+    return (html.replace("/*__PALETTE__*/", css_vars)
+                .replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False).replace("</", "<\\/")))
+
+
+# ── live two-way component ─────────────────────────────────────────────
+from ui.experience_component import experience as _experience  # noqa: E402
+
+
+def handle(req):
+    """Answer one request from the HTML UI using the backend (read-only)."""
+    op, data = req.get("op"), req.get("data") or {}
+    if op == "generate":
+        return gen_service.generate(data.get("cfg") or {})
+    if op == "randomize":
+        return gen_service.generate(gen_service.random_config())
+    if op == "load":
+        # Same effect as the Streamlit Generator's "Load this machine into the Simulator".
+        naive, lam, cfg = build(data["cfg"])
+        mdfa, mlam, _classes, _trace = to_minimal(naive, lam)
+        st.session_state.machine = (mdfa, mlam, cfg)
+        st.session_state.state = mdfa.initial_state
+        st.session_state.log = []
+        st.session_state.message = "Insert coins, then choose a product."
+        init_ui_state()
+        on_reset()
+        return {"ok": True}
+    return {"ok": False, "error": f"Unknown request: {op}"}
+
+
+req = st.session_state.get("vm_experience")
+if isinstance(req, dict) and req.get("id") and req["id"] != st.session_state.get("vm_last_req"):
+    st.session_state.vm_last_req = req["id"]
+    try:
+        reply = handle(req)
+    except Exception as e:  # never crash the page on a bad request
+        reply = {"ok": False, "error": f"Backend error: {e}"}
+    st.session_state.vm_reply = {**reply, "id": req["id"]}
+
+cfg = (st.session_state.machine[2] if "machine" in st.session_state else load_config(DEFAULT_CFG))
+payload = gen_service.machine_payload(cfg)
 
 # Full-bleed stage: the experience owns the whole viewport.
 st.markdown("""<style>
 [data-testid="stMainBlockContainer"] { padding: 0 !important; max-width: none !important; }
 [data-testid="stHeader"] { background: transparent !important; }
 [data-testid="stAppViewContainer"], .stApp { background: %s; }
-[data-testid="stIFrame"], .stApp iframe { height: 100vh !important; width: 100%% !important;
-  display: block; border: 0; }
+[data-testid="stCustomComponentV1"], [data-testid="stIFrame"], .stApp iframe {
+  height: 100vh !important; width: 100%% !important; display: block; border: 0; }
 [data-testid="stMain"] { overflow: hidden; }
 </style>""" % theme.BACKGROUND, unsafe_allow_html=True)
 
 with st.sidebar:
     st.caption("Showing the machine currently loaded in this session. Build a different "
                "one on the Generator page and it appears here too.")
-    st.download_button("Download offline copy (HTML)", html, "state_machine.html", "text/html",
-                       width="stretch", icon=":material/download:",
-                       help="A single file that opens in any browser, with no Python or internet "
-                            "needed. Handy as a viva backup.")
+    st.download_button(
+        "Download offline copy (HTML)",
+        render_html(payload, _prebuilt(json.dumps(load_config(DEFAULT_CFG)))),
+        "state_machine.html", "text/html", width="stretch", icon=":material/download:",
+        help="A single file that opens in any browser, with no Python or internet needed. "
+             "Its Generator includes machines pre-built by the backend. Handy as a viva backup.")
 
-st.iframe(html, height=900)
+_experience(machine=payload, palette=palette(), default_form=gen_service.DEFAULT_FORM,
+            reply=st.session_state.get("vm_reply"), key="vm_experience", default=None)
 
 # ── Dashboard dock (added): top-left entry into the Streamlit dashboard ──
 # Native page links, so switching pages keeps this session's machine,

@@ -1,8 +1,11 @@
 /* STATE MACHINE: scroll experience (frontend only).
    Injected into web/experience.html by app/pages/1_Inside_the_Machine.py.
-   Reads M (the backend's minimized DFA + Mealy outputs). Never alters it. */
-(function () {
+   Reads M (the backend's minimized DFA + Mealy outputs). Never alters it.
+   Booted by web/boot.js with the machine the Python page supplies. */
+window.VM_BOOT = function (M, ENV) {
 'use strict';
+ENV = ENV || {};
+const HOOK = { sim: false, paused: false };      // set by views.js
 
 /* ─── palette (single source: core/theme.py → CSS vars) ─── */
 const css = getComputedStyle(document.documentElement);
@@ -486,13 +489,13 @@ function pick(e) {
   ray.setFromCamera(ptr, camera); const h = ray.intersectObjects(hit, false)[0]; return h ? h.object : null;
 }
 // canvas sits under <main>; listen on the window and ignore clicks on real UI
-function overUI(e) { return e.target.closest && e.target.closest('button, .panel, a, table, .chapter, .graph-wrap'); }
+function overUI(e) { return e.target.closest && e.target.closest('button, .panel, a, table, .chapter, .graph-wrap, .vm-nav, .sim-panel, input, select, label'); }
 addEventListener('pointermove', e => {
-  if (!R || diveP > .3 || overUI(e)) { if (hovered) { hovered = null; document.body.style.cursor = ''; } return; }
+  if (!R || HOOK.paused || effP() > .3 || overUI(e)) { if (hovered) { hovered = null; document.body.style.cursor = ''; } return; }
   if (drag) { yawT = Math.max(-.6, Math.min(.6, drag.yaw + (e.clientX - drag.x) / 300)); return; }
   hovered = pick(e); document.body.style.cursor = hovered ? 'pointer' : '';
 });
-addEventListener('pointerdown', e => { if (!R || diveP > .3 || overUI(e)) return; const h = pick(e);
+addEventListener('pointerdown', e => { if (!R || HOOK.paused || effP() > .3 || overUI(e)) return; const h = pick(e);
   if (h) { runToken++; feed(h.userData.sym); } else drag = { x: e.clientX, yaw: yawT }; });
 addEventListener('pointerup', () => { drag = null; });
 
@@ -502,6 +505,7 @@ const heroPanel = hero.querySelector('.panel'), cue = hero.querySelector('.scrol
 const pixels = document.getElementById('pixels'), flashEl = document.getElementById('blueprint-flash');
 const diveText = document.getElementById('dive-text'), calloutBox = document.getElementById('callouts');
 let diveP = 0, heroP = 0, stageOn = true;
+const effP = () => (HOOK.sim ? 0 : diveP);
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 
@@ -533,7 +537,7 @@ function onScroll() {
   pixels.style.backgroundSize = `${7 + smooth(.8, 1, diveP) * 40}px ${7 + smooth(.8, 1, diveP) * 40}px`;
   flashEl.style.opacity = smooth(.88, 1, diveP);
   stageOn = diveP < .995;
-  canvas.style.visibility = stageOn ? 'visible' : 'hidden';
+  canvas.style.visibility = stageOn || HOOK.sim ? 'visible' : 'hidden';
   if (traces) traces.material.opacity = smooth(.12, .22, diveP) * (1 - smooth(.6, .75, diveP)) * .95;
 }
 addEventListener('scroll', onScroll, { passive: true });
@@ -553,7 +557,7 @@ function camKey(p) {
 
 const tmp = new THREE.Vector3();
 function placeCallouts() {
-  const vis = diveP > 0 && diveP < .5;
+  const vis = !HOOK.sim && diveP > 0 && diveP < .5;
   CALLOUTS.forEach(c => {
     const show = vis && diveP > c.at && diveP < .46 && anchors[c.a];
     c.d.style.opacity = show ? 1 : 0;
@@ -574,11 +578,11 @@ let tPrev = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   stepTweens(now);
-  if (!R || !stageOn) return;
+  if (!R || HOOK.paused || (!stageOn && !HOOK.sim)) return;
   const dt = Math.min(.05, (now - tPrev) / 1000); tPrev = now;
-  const k = camKey(diveP);
+  const k = camKey(effP());
   yaw += ((drag ? yawT : (yawT *= .94)) - yaw) * Math.min(1, dt * 8);
-  VM.rotation.y = yaw * (1 - smooth(0, .3, diveP)) + Math.sin(now / 2600) * 0.06 * (1 - smooth(0, .2, diveP)) * (REDUCED ? 0 : 1);
+  VM.rotation.y = yaw * (1 - smooth(0, .3, effP())) + Math.sin(now / 2600) * 0.06 * (1 - smooth(0, .2, effP())) * (REDUCED ? 0 : 1);
   camera.position.set(...k.pos); camera.lookAt(...k.tgt);
   if (Math.abs(camera.fov - k.fov) > .01) { camera.fov = k.fov; camera.updateProjectionMatrix(); }
   hit.forEach(m => { const on = m === hovered; if (m.material[0]) m.material[0].emissive = new THREE.Color(on ? C.secondary : '#000'); if (m.material[0]) m.material[0].emissiveIntensity = on ? .5 : 0; });
@@ -778,4 +782,10 @@ subs.forEach(f => f(null));
 requestAnimationFrame(frame);
 if (!R) { canvas.style.display = 'none'; document.querySelector('.lede').insertAdjacentHTML('afterend',
   '<p class="lede" style="color:var(--warning)">3D is unavailable in this browser. Everything below still works.</p>'); }
-})();
+
+if (ENV.onReady) ENV.onReady({
+  M, C, S, on, feed, resetMachine, cancelRun: () => { runToken++; }, formal, isFinal, bal, el, HOOK,
+  syncScroll: onScroll, has3D: !!R,
+  scrollTop: () => scrollTo({ top: 0, behavior: 'instant' }),
+});
+};
